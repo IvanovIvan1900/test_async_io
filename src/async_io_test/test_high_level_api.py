@@ -193,4 +193,88 @@ class TestToTread:
 
 
 class TestTask:
-    
+    list_message: list[str] = []
+
+    async def coro_test(self, delay: int, msg: str,
+                        ret_msg: str | None = None) -> str:
+        try:
+            await asyncio.sleep(delay)
+            self.list_message.append(msg)
+        except asyncio.CancelledError:
+            self.list_message.append("coro_cancel")
+            raise
+        finally:
+            self.list_message.append("coro_finaly")
+
+        if ret_msg:
+            return ret_msg
+        else:
+            return None
+
+    @pytest.mark.asyncio
+    async def test_task_done(self):
+        self.list_message.clear()
+        self.list_message.append("start")
+        task_demo = asyncio.create_task(self.coro_test(1, "hello", "retry"),
+                                        name="task demo")
+        await task_demo
+        self.list_message.append("stop")
+
+        assert task_demo.done()
+        assert task_demo.result() == "retry"
+        assert task_demo.exception() is None
+        assert task_demo.get_name() == "task demo"
+        assert not task_demo.cancelled()
+        assert "start hello coro_finaly stop".split() == self.list_message
+
+    @pytest.mark.asyncio
+    async def test_task_cancel(self):
+        self.list_message.clear()
+        self.list_message.append("start")
+        task_demo = asyncio.create_task(self.coro_test(2,"hello", "retry"),
+                                        name="task demo")
+        await asyncio.sleep(1)
+        task_demo.cancel()
+        try:
+            await task_demo
+        except asyncio.CancelledError:
+            self.list_message.append("task_except")
+
+        self.list_message.append("stop")
+
+        assert task_demo.done()
+        assert task_demo.cancelled()
+        # If the Task has been cancelled, this method raises a CancelledError exception
+        # task_demo.exception()
+        assert "start coro_cancel coro_finaly task_except stop".split()\
+            == self.list_message
+
+    @pytest.mark.asyncio
+    async def test_task_cancel_not_cancelled(self):
+        async def coro_uncancelled(list_message: list[str]):
+            try:
+                await asyncio.sleep(2)
+                list_message.append("after_timer")
+            except asyncio.CancelledError:
+                list_message.append("coro_except")
+            list_message.append("coro_after_except")
+
+        self.list_message.clear()
+        self.list_message.append("start")
+        task_demo = asyncio.create_task(coro_uncancelled(self.list_message),
+                                        name="task demo")
+        await asyncio.sleep(1)
+        task_demo.cancel()
+        try:
+            await task_demo
+        except asyncio.CancelledError:
+            self.list_message.append("task_except")
+
+        self.list_message.append("stop")
+
+        assert task_demo.done()
+        assert not task_demo.cancelled()
+        # If the Task has been cancelled, this method raises a CancelledError exception
+        # task_demo.exception()
+        assert "start coro_except coro_after_except stop".split()\
+            == self.list_message
