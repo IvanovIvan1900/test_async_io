@@ -142,3 +142,27 @@ class TestResponse:
                 with open(temp_file, 'wb') as fd:
                     async for chunk in resp.content.iter_chunked(chunk_size):
                         fd.write(chunk)
+
+
+class TestAdditional:
+
+    @pytest.mark.asyncio
+    async def test_header(self):
+        my_header = {"dav_header": "header_value"}
+        async with aiohttp.ClientSession(headers=my_header) as session:
+            async with session.get("http://httpbin.org/headers") as r:
+                json_body = await r.json()
+                # важно, ключ с подчеркиваем конвертировался
+                # в верблюжью запись и с дефисом
+                assert json_body['headers']['Dav-Header']\
+                    == my_header["dav_header"]
+
+    @pytest.mark.asyncio
+    async def test_coockie(self):
+        url = 'http://httpbin.org/cookies'
+        cookies = {'cookies_are': 'working'}
+        async with aiohttp.ClientSession(cookies=cookies) as session:
+            async with session.get(url) as resp:
+                assert await resp.json() == {
+                    "cookies": {"cookies_are": "working"}
+                }
